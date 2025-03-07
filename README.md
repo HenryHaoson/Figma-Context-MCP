@@ -78,7 +78,10 @@ The `figma-developer-mcp` server can be configured by adding the following to yo
 
 ## Configuration
 
-The server can be configured using either environment variables (via `.env` file) or command-line arguments. Command-line arguments take precedence over environment variables.
+The server can be configured using environment variables (via `.env` file), command-line arguments, or query parameters. The order of precedence is:
+1. Query parameters (highest priority)
+2. Command-line arguments
+3. Environment variables (lowest priority)
 
 ### Environment Variables
 
@@ -92,6 +95,18 @@ The server can be configured using either environment variables (via `.env` file
 - `--port`: The port to run the server on
 - `--stdio`: Run the server in command mode, instead of default HTTP/SSE
 - `--help`: Show help menu
+
+### Query Parameters
+
+When using the HTTP server, you can also update the API key using query parameters:
+
+- Connect to SSE with an API key: `http://localhost:3333/sse?key=your_figma_api_key`
+- Update API key dynamically: `http://localhost:3333/update-api-key?key=your_figma_api_key`
+
+This is useful for:
+- Development environments with multiple API keys
+- CI/CD pipeline testing
+- Avoiding environment variable setup
 
 ## Connecting to Cursor
 

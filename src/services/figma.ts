@@ -39,11 +39,28 @@ type FetchImageFillParams = Omit<FetchImageParams, "fileType"> & {
 };
 
 export class FigmaService {
-  private readonly apiKey: string;
+  private apiKey: string;
   private readonly baseUrl = "https://api.figma.com/v1";
 
   constructor(apiKey: string) {
     this.apiKey = apiKey;
+  }
+
+  /**
+   * Updates the Figma API key used for requests
+   * @param apiKey - The new Figma API key
+   */
+  updateApiKey(apiKey: string): void {
+    this.apiKey = apiKey;
+    Logger.log("Figma API key updated");
+  }
+
+  /**
+   * Gets the current API key (masked for security)
+   */
+  getApiKey(): string {
+    if (this.apiKey.length <= 4) return "****";
+    return `****${this.apiKey.slice(-4)}`;
   }
 
   private async request<T>(endpoint: string): Promise<T> {

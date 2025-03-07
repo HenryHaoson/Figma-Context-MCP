@@ -10,6 +10,7 @@ services:
       - PORT=3333
       # Uncomment and set your Figma API key for production deployment
       # - FIGMA_API_KEY=your_figma_api_key
+      # Or you can use query parameters: http://localhost:3333/sse?key=your_figma_api_key
     volumes:
       # Mount a volume for logs
       - ./logs:/app/logs
