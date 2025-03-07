@@ -218,6 +218,7 @@ export class FigmaMcpServer {
       }
       
       // Check for API key in query parameters
+      // @ts-ignore
       const apiKey = req.query.key as string;
       if (apiKey) {
         this.figmaService.updateApiKey(apiKey);
