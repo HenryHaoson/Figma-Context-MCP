@@ -8,6 +8,12 @@ export async function startServer(): Promise<void> {
 
   const config = getServerConfig(isStdioMode);
 
+  // In stdio mode, we must have an API key configured
+  if (isStdioMode && !config.figmaApiKey) {
+    console.error("FIGMA_API_KEY is required for stdio mode (via CLI argument --figma-api-key or .env file)");
+    process.exit(1);
+  }
+
   const server = new FigmaMcpServer(config.figmaApiKey);
 
   if (isStdioMode) {
@@ -15,6 +21,10 @@ export async function startServer(): Promise<void> {
     await server.connect(transport);
   } else {
     console.log(`Initializing Figma MCP Server in HTTP mode on port ${config.port}...`);
+    if (!config.figmaApiKey) {
+      console.log("No API key provided via CLI or environment variables.");
+      console.log("You must provide an API key via query parameter: /sse?key=your_figma_api_key");
+    }
     await server.startHttpServer(config.port);
   }
 }

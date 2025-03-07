@@ -16,8 +16,11 @@ export class FigmaMcpServer {
   private readonly server: McpServer;
   private readonly figmaService: FigmaService;
   private sseTransport: SSEServerTransport | null = null;
+  private apiKeyRequired: boolean = true;
 
   constructor(figmaApiKey: string) {
+    // If figmaApiKey is empty, we'll expect it via query params
+    this.apiKeyRequired = !!figmaApiKey;
     this.figmaService = new FigmaService(figmaApiKey);
     this.server = new McpServer(
       {
@@ -192,15 +195,18 @@ export class FigmaMcpServer {
 
   async startHttpServer(port: number): Promise<void> {
     const app = express();
+    
     app.get("/sse", async (req: Request, res: Response) => {
       console.log("New SSE connection established");
       
       // Check for API key in query parameters
-      // @ts-ignore
       const apiKey = req.query.key as string;
       if (apiKey) {
         this.figmaService.updateApiKey(apiKey);
         Logger.log(`Updated API key from query parameter: ${this.figmaService.getApiKey()}`);
+      } else if (this.apiKeyRequired) {
+        res.status(400).send("Figma API key is required. Use /sse?key=your_figma_api_key");
+        return;
       }
       
       this.sseTransport = new SSEServerTransport(
@@ -218,10 +224,12 @@ export class FigmaMcpServer {
       }
       
       // Check for API key in query parameters
-      // @ts-ignore
       const apiKey = req.query.key as string;
       if (apiKey) {
         this.figmaService.updateApiKey(apiKey);
+      } else if (this.apiKeyRequired) {
+        res.status(400).send("Figma API key is required. Use /messages?key=your_figma_api_key");
+        return;
       }
       
       await this.sseTransport.handlePostMessage(
