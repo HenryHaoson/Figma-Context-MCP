@@ -14,8 +14,10 @@ import { buildSimplifiedEffects, SimplifiedEffects } from "~/transformers/effect
  * TDOO ITEMS
  *
  * - Improve layout handling—translate from Figma vocabulary to CSS
- * - Look up existing styles in new MCP endpoint—Figma supports individual lookups without enterprise /v1/styles/:key
- * - Support endpoint for getting SVG data from Figma, similar to images
+ * - Pull image fills/vectors out to top level for better AI visibility
+ *   ? Implement vector parents again for proper downloads
+ * ? Look up existing styles in new MCP endpoint—Figma supports individual lookups without enterprise /v1/styles/:key
+ * ? Parse out and save .cursor/rules/design-tokens file on command
  **/
 
 // -------------------- SIMPLIFIED STRUCTURES --------------------
@@ -119,7 +121,7 @@ export function parseFigmaResponse(data: GetFileResponse | GetFileNodesResponse)
     nodes = Object.values(data.nodes).map((n) => n.document);
   }
   let globalVars: GlobalVars = {
-    styles: {}
+    styles: {},
   };
   const simplifiedNodes: SimplifiedNode[] = nodes
     .filter(isVisible)
@@ -225,7 +227,7 @@ function parseNode(
   }
 
   const effects = buildSimplifiedEffects(n);
-  if (effects.boxShadow) {
+  if (Object.keys(effects).length) {
     simplified.effects = findOrCreateVar(globalVars, effects, "effect");
   }
 
@@ -267,7 +269,7 @@ function parseNode(
 
   // Convert VECTOR to IMAGE
   if (type === "VECTOR") {
-    simplified.type = "IMAGE"
+    simplified.type = "IMAGE-SVG";
   }
 
   return removeEmptyKeys(simplified);

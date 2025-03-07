@@ -133,7 +133,7 @@ To inspect responses from the MCP server more easily, you can run the `inspect` 
 
 ```bash
 pnpm inspect
-# > figma-mcp@0.1.0 inspect
+# > figma-mcp@0.1.7 inspect
 # > pnpx @modelcontextprotocol/inspector
 #
 # Starting MCP inspector...
@@ -163,3 +163,30 @@ Parameters:
 
 - `fileKey` (string): The key of the Figma file containing the node
 - `nodeId` (string): The ID of the node to fetch
+
+## Docker Deployment
+
+You can deploy this service using Docker:
+
+### Using Docker Compose (recommended)
+
+1. Create a `.env` file with your Figma API key or edit `docker-compose.yml` to include it directly
+2. Run the service:
+
+```bash
+docker-compose up -d
+```
+
+### Using Docker directly
+
+1. Build the Docker image:
+
+```bash
+docker build -t figma-context-mcp .
+```
+
+2. Run the container:
+
+```bash
+docker run -p 3333:3333 -e FIGMA_API_KEY=your_figma_api_key -d figma-context-mcp
+```

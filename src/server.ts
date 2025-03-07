@@ -7,6 +7,11 @@ import { IncomingMessage, ServerResponse } from "http";
 import { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import { SimplifiedDesign } from "./services/simplify-node-response";
 
+export const Logger = {
+  log: (...args: any[]) => {},
+  error: (...args: any[]) => {},
+};
+
 export class FigmaMcpServer {
   private readonly server: McpServer;
   private readonly figmaService: FigmaService;
@@ -14,10 +19,18 @@ export class FigmaMcpServer {
 
   constructor(figmaApiKey: string) {
     this.figmaService = new FigmaService(figmaApiKey);
-    this.server = new McpServer({
-      name: "Figma MCP Server",
-      version: "0.1.5",
-    });
+    this.server = new McpServer(
+      {
+        name: "Figma MCP Server",
+        version: "0.1.7",
+      },
+      {
+        capabilities: {
+          logging: {},
+          tools: {},
+        },
+      },
+    );
 
     this.registerTools();
   }
@@ -48,7 +61,7 @@ export class FigmaMcpServer {
       },
       async ({ fileKey, nodeId, depth }) => {
         try {
-          console.log(
+          Logger.log(
             `Fetching ${
               depth ? `${depth} layers deep` : "all layers"
             } of ${nodeId ? `node ${nodeId} from file` : `full file`} ${fileKey} at depth: ${
@@ -63,7 +76,7 @@ export class FigmaMcpServer {
             file = await this.figmaService.getFile(fileKey, depth);
           }
 
-          console.log(`Successfully fetched file: ${file.name}`);
+          Logger.log(`Successfully fetched file: ${file.name}`);
           const { nodes, globalVars, ...metadata } = file;
 
           // Stringify each node individually to try to avoid max string length error with big files
@@ -76,7 +89,7 @@ export class FigmaMcpServer {
             content: [{ type: "text", text: resultJson }],
           };
         } catch (error) {
-          console.error(`Error fetching file ${fileKey}:`, error);
+          Logger.error(`Error fetching file ${fileKey}:`, error);
           return {
             content: [{ type: "text", text: `Error fetching file: ${error}` }],
           };
@@ -84,17 +97,24 @@ export class FigmaMcpServer {
       },
     );
 
+    // TODO: Clean up all image download related code, particularly getImages in Figma service
     // Tool to download images
     this.server.tool(
       "download_figma_images",
-      "Download SVG or PNG images used in a Figma file based on the IDs of image or icon nodes",
+      "Download SVG and PNG images used in a Figma file based on the IDs of image or icon nodes",
       {
         fileKey: z.string().describe("The key of the Figma file containing the node"),
         nodes: z
           .object({
             nodeId: z
               .string()
-              .describe("The Figma ID of the node to fetch, formatted as 1234:5678"),
+              .describe("The ID of the Figma image node to fetch, formatted as 1234:5678"),
+            imageRef: z
+              .string()
+              .optional()
+              .describe(
+                "If a node has an imageRef fill, you must include this variable. Leave blank when downloading Vector SVG images.",
+              ),
             fileName: z.string().describe("The local name for saving the fetched file"),
           })
           .array()
@@ -107,19 +127,41 @@ export class FigmaMcpServer {
       },
       async ({ fileKey, nodes, localPath }) => {
         try {
-          const downloads = nodes.map(({ nodeId, fileName }) => {
-            console.log(`get image "${nodeId}", saving to: ${localPath}/${fileName}`);
-            const fileType = fileName.endsWith(".svg") ? "svg" : "png";
-            return this.figmaService.getImage(fileKey, nodeId, fileName, localPath, fileType);
-          });
+          const imageFills = nodes.filter(({ imageRef }) => !!imageRef) as {
+            nodeId: string;
+            imageRef: string;
+            fileName: string;
+          }[];
+          const fillDownloads = this.figmaService.getImageFills(fileKey, imageFills, localPath);
+          const renderRequests = nodes
+            .filter(({ imageRef }) => !imageRef)
+            .map(({ nodeId, fileName }) => ({
+              nodeId,
+              fileName,
+              fileType: fileName.endsWith(".svg") ? ("svg" as const) : ("png" as const),
+            }));
+
+          const renderDownloads = this.figmaService.getImages(fileKey, renderRequests, localPath);
+
+          const downloads = await Promise.all([fillDownloads, renderDownloads]).then(([f, r]) => [
+            ...f,
+            ...r,
+          ]);
 
           // If any download fails, return false
-          const saveSuccess = !(await Promise.all(downloads)).find((success) => !success);
+          const saveSuccess = !downloads.find((success) => !success);
           return {
-            content: [{ type: "text", text: saveSuccess ? "Success" : "Failed" }],
+            content: [
+              {
+                type: "text",
+                text: saveSuccess
+                  ? `Success, ${downloads.length} images downloaded: ${downloads.join(", ")}`
+                  : "Failed",
+              },
+            ],
           };
         } catch (error) {
-          console.error(`Error downloading images from file ${fileKey}:`, error);
+          Logger.error(`Error downloading images from file ${fileKey}:`, error);
           return {
             content: [{ type: "text", text: `Error downloading images: ${error}` }],
           };
@@ -129,9 +171,23 @@ export class FigmaMcpServer {
   }
 
   async connect(transport: Transport): Promise<void> {
-    console.log("Connecting to transport...");
+    // Logger.log("Connecting to transport...");
     await this.server.connect(transport);
-    console.log("Server connected and ready to process requests");
+
+    Logger.log = (...args: any[]) => {
+      this.server.server.sendLoggingMessage({
+        level: "info",
+        data: args,
+      });
+    };
+    Logger.error = (...args: any[]) => {
+      this.server.server.sendLoggingMessage({
+        level: "error",
+        data: args,
+      });
+    };
+
+    Logger.log("Server connected and ready to process requests");
   }
 
   async startHttpServer(port: number): Promise<void> {
@@ -158,10 +214,13 @@ export class FigmaMcpServer {
       );
     });
 
+    Logger.log = console.log;
+    Logger.error = console.error;
+
     app.listen(port, () => {
-      console.log(`HTTP server listening on port ${port}`);
-      console.log(`SSE endpoint available at http://localhost:${port}/sse`);
-      console.log(`Message endpoint available at http://localhost:${port}/messages`);
+      Logger.log(`HTTP server listening on port ${port}`);
+      Logger.log(`SSE endpoint available at http://localhost:${port}/sse`);
+      Logger.log(`Message endpoint available at http://localhost:${port}/messages`);
     });
   }
 }
