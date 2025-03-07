@@ -18,11 +18,7 @@
     "start:http": "node dist/index.js",
     "dev": "cross-env NODE_ENV=development tsx watch src/index.ts",
     "dev:cli": "cross-env NODE_ENV=development tsx watch src/index.ts --stdio",
-    "lint": "eslint . --ext .ts",
-    "format": "prettier --write \"src/**/*.ts\"",
-    "inspect": "pnpx @modelcontextprotocol/inspector",
-    "prepare": "pnpm run build && chmod +x ./dist/cli.js",
-    "pub:release": "pnpm build && npm publish"
+    "format": "prettier --write \"src/**/*.ts\""
   },
   "engines": {
     "node": "^20.17.0"
