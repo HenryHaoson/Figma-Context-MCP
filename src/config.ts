@@ -67,10 +67,12 @@ export function getServerConfig(isStdioMode: boolean): ServerConfig {
     config.configSources.port = "env";
   }
 
-  // Validate configuration
-  if (!config.figmaApiKey) {
-    console.error("FIGMA_API_KEY is required (via CLI argument --figma-api-key or .env file)");
-    process.exit(1);
+  // In HTTP mode, we don't need to validate figmaApiKey here
+  // as it can be provided via query parameters
+  if (!config.figmaApiKey && process.env.NODE_ENV !== "development") {
+    console.warn("No FIGMA_API_KEY found via CLI or .env file");
+    console.warn("API key must be provided via query parameter (e.g., /sse?key=your_figma_api_key)");
+    config.configSources.figmaApiKey = "none";
   }
 
   // Log configuration sources
