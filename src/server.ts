@@ -200,11 +200,13 @@ export class FigmaMcpServer {
       console.log("New SSE connection established");
       
       // Check for API key in query parameters
+      // @ts-ignore
       const apiKey = req.query.key as string;
       if (apiKey) {
         this.figmaService.updateApiKey(apiKey);
         Logger.log(`Updated API key from query parameter: ${this.figmaService.getApiKey()}`);
       } else if (this.apiKeyRequired) {
+        // @ts-ignore
         res.status(400).send("Figma API key is required. Use /sse?key=your_figma_api_key");
         return;
       }
@@ -224,12 +226,10 @@ export class FigmaMcpServer {
       }
       
       // Check for API key in query parameters
+      // @ts-ignore
       const apiKey = req.query.key as string;
       if (apiKey) {
         this.figmaService.updateApiKey(apiKey);
-      } else if (this.apiKeyRequired) {
-        res.status(400).send("Figma API key is required. Use /messages?key=your_figma_api_key");
-        return;
       }
       
       await this.sseTransport.handlePostMessage(
