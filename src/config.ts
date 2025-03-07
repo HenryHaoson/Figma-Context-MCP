@@ -9,7 +9,7 @@ interface ServerConfig {
   figmaApiKey: string;
   port: number;
   configSources: {
-    figmaApiKey: "cli" | "env";
+    figmaApiKey: "cli" | "env" | "none";
     port: "cli" | "env" | "default";
   };
 }
