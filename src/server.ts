@@ -196,6 +196,7 @@ export class FigmaMcpServer {
       console.log("New SSE connection established");
       
       // Check for API key in query parameters
+      // @ts-ignore
       const apiKey = req.query.key as string;
       if (apiKey) {
         this.figmaService.updateApiKey(apiKey);
