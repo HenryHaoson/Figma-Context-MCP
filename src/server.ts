@@ -14,14 +14,14 @@ export const Logger = {
 
 export class FigmaMcpServer {
   private readonly server: McpServer;
-  private readonly figmaService: FigmaService;
   private sseTransport: SSEServerTransport | null = null;
   private apiKeyRequired: boolean = true;
+  private apiKey: string;
 
   constructor(figmaApiKey: string) {
     // If figmaApiKey is empty, we'll expect it via query params
     this.apiKeyRequired = !!figmaApiKey;
-    this.figmaService = new FigmaService(figmaApiKey);
+    this.apiKey = figmaApiKey;
     this.server = new McpServer(
       {
         name: "Figma MCP Server",
@@ -36,6 +36,16 @@ export class FigmaMcpServer {
     );
 
     this.registerTools();
+  }
+
+  private getFigmaService(): FigmaService {
+    // 创建一个新的FigmaService实例，每次调用都是会话级别的
+    return new FigmaService(this.apiKey);
+  }
+
+  private updateApiKey(newApiKey: string): void {
+    this.apiKey = newApiKey;
+    Logger.log(`Updated API key: ${this.apiKey}`);
   }
 
   private registerTools(): void {
@@ -72,11 +82,14 @@ export class FigmaMcpServer {
             }`,
           );
 
+          // 为当前请求创建新的FigmaService实例
+          const figmaService = this.getFigmaService();
+          
           let file: SimplifiedDesign;
           if (nodeId) {
-            file = await this.figmaService.getNode(fileKey, nodeId, depth);
+            file = await figmaService.getNode(fileKey, nodeId, depth);
           } else {
-            file = await this.figmaService.getFile(fileKey, depth);
+            file = await figmaService.getFile(fileKey, depth);
           }
 
           Logger.log(`Successfully fetched file: ${file.name}`);
@@ -130,12 +143,15 @@ export class FigmaMcpServer {
       },
       async ({ fileKey, nodes, localPath }) => {
         try {
+          // 为当前请求创建新的FigmaService实例
+          const figmaService = this.getFigmaService();
+          
           const imageFills = nodes.filter(({ imageRef }) => !!imageRef) as {
             nodeId: string;
             imageRef: string;
             fileName: string;
           }[];
-          const fillDownloads = this.figmaService.getImageFills(fileKey, imageFills, localPath);
+          const fillDownloads = figmaService.getImageFills(fileKey, imageFills, localPath);
           const renderRequests = nodes
             .filter(({ imageRef }) => !imageRef)
             .map(({ nodeId, fileName }) => ({
@@ -144,7 +160,7 @@ export class FigmaMcpServer {
               fileType: fileName.endsWith(".svg") ? ("svg" as const) : ("png" as const),
             }));
 
-          const renderDownloads = this.figmaService.getImages(fileKey, renderRequests, localPath);
+          const renderDownloads = figmaService.getImages(fileKey, renderRequests, localPath);
 
           const downloads = await Promise.all([fillDownloads, renderDownloads]).then(([f, r]) => [
             ...f,
@@ -203,8 +219,8 @@ export class FigmaMcpServer {
       // @ts-ignore
       const apiKey = req.query.key as string;
       if (apiKey) {
-        this.figmaService.updateApiKey(apiKey);
-        Logger.log(`Updated API key from query parameter: ${this.figmaService.getApiKey()}`);
+        this.updateApiKey(apiKey);
+        Logger.log(`Updated API key from query parameter: ${this.apiKey}`);
       } else if (this.apiKeyRequired) {
         // @ts-ignore
         res.status(400).send("Figma API key is required. Use /sse?key=your_figma_api_key");
@@ -229,7 +245,7 @@ export class FigmaMcpServer {
       // @ts-ignore
       const apiKey = req.query.key as string;
       if (apiKey) {
-        this.figmaService.updateApiKey(apiKey);
+        this.updateApiKey(apiKey);
       }
       
       await this.sseTransport.handlePostMessage(
