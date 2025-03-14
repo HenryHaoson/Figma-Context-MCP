@@ -66,7 +66,7 @@ export class FigmaService {
     return `****${this.apiKey.slice(-4)}`;
   }
 
-  private async request<T>(endpoint: string): Promise<T> {
+  async request<T>(endpoint: string): Promise<T> {
     const requestId = Math.random().toString(36).substring(2, 9);
     const url = `${this.baseUrl}${endpoint}`;
     

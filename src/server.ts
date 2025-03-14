@@ -8,6 +8,7 @@ import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import { IncomingMessage, ServerResponse } from "http";
 import { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import { SimplifiedDesign } from "./services/simplify-node-response";
+import type { GetImagesResponse, GetImageFillsResponse } from "@figma/rest-api-spec";
 
 export const Logger = {
   debug: (...args: any[]) => {
@@ -127,7 +128,8 @@ export class FigmaMcpServer {
           const metadataJson = JSON.stringify(metadata, null, 2);
           const globalVarsJson = JSON.stringify(globalVars, null, 2);
           const resultJson = `{ "metadata": ${metadataJson}, "nodes": ${nodesJson}, "globalVars": ${globalVarsJson} }`;
-
+          Logger.debug("序列化完成");
+          Logger.debug(resultJson);
           return {
             content: [{ type: "text", text: resultJson }],
           };
@@ -140,76 +142,126 @@ export class FigmaMcpServer {
       },
     );
 
-    // TODO: Clean up all image download related code, particularly getImages in Figma service
-    // Tool to download images
     this.server.tool(
-      "download_figma_images",
-      "Download SVG and PNG images used in a Figma file based on the IDs of image or icon nodes",
+      "get_figma_image_urls",
+      "Get URLs for Figma nodes as images (PNG or SVG). Works with any node type - Figma can render any node as an image. Download to use in your own projects.",
       {
         fileKey: z.string().describe("The key of the Figma file containing the node"),
         nodes: z
           .object({
             nodeId: z
               .string()
-              .describe("The ID of the Figma image node to fetch, formatted as 1234:5678"),
+              .describe("The ID of the Figma node to fetch as image, formatted as 1234:5678"),
             imageRef: z
               .string()
               .optional()
               .describe(
-                "If a node has an imageRef fill, you must include this variable. Leave blank when downloading Vector SVG images.",
+                "If a node has an imageRef fill, you must include this variable. Leave blank for rendering nodes as images.",
               ),
-            fileName: z.string().describe("The local name for saving the fetched file"),
+            format: z
+              .enum(["png", "svg", "jpg", "pdf"])
+              .optional()
+              .default("png")
+              .describe("The format of the image to fetch. Defaults to png. SVG only works with vector nodes."),
+            scale: z
+              .number()
+              .optional()
+              .default(1)
+              .describe("The scale to render the image at. Defaults to 1."),
           })
           .array()
           .describe("The nodes to fetch as images"),
-        localPath: z
-          .string()
-          .describe(
-            "The absolute path to the directory where images are stored in the project. Automatically creates directories if needed.",
-          ),
       },
-      async ({ fileKey, nodes, localPath }) => {
+      async ({ fileKey, nodes }) => {
         try {
+          Logger.log(`Getting image URLs for ${nodes.length} nodes in file ${fileKey}`);
           // 为当前请求创建新的FigmaService实例
           const figmaService = this.getFigmaService();
           
-          const imageFills = nodes.filter(({ imageRef }) => !!imageRef) as {
-            nodeId: string;
-            imageRef: string;
-            fileName: string;
-          }[];
-          const fillDownloads = figmaService.getImageFills(fileKey, imageFills, localPath);
-          const renderRequests = nodes
-            .filter(({ imageRef }) => !imageRef)
-            .map(({ nodeId, fileName }) => ({
-              nodeId,
-              fileName,
-              fileType: fileName.endsWith(".svg") ? ("svg" as const) : ("png" as const),
-            }));
-
-          const renderDownloads = figmaService.getImages(fileKey, renderRequests, localPath);
-
-          const downloads = await Promise.all([fillDownloads, renderDownloads]).then(([f, r]) => [
-            ...f,
-            ...r,
-          ]);
-
-          // If any download fails, return false
-          const saveSuccess = !downloads.find((success) => !success);
+          // 处理有 imageRef 的节点 (图片填充)
+          const imageFills = nodes.filter(({ imageRef }) => !!imageRef);
+          let imageUrls: Record<string, string> = {};
+          
+          if (imageFills.length > 0) {
+            Logger.debug(`Getting image fill URLs for ${imageFills.length} nodes`);
+            const endpoint = `/files/${fileKey}/images`;
+            const imageFillResponse = await figmaService.request<GetImageFillsResponse>(endpoint);
+            const { images = {} } = imageFillResponse.meta;
+            
+            for (const node of imageFills) {
+              if (node.imageRef && images[node.imageRef]) {
+                imageUrls[node.nodeId] = images[node.imageRef];
+              }
+            }
+            Logger.log(`Got ${Object.keys(imageUrls).length} image fill URLs`);
+          }
+          
+          // 处理其他节点 (渲染为图片)
+          const renderNodes = nodes.filter(({ imageRef }) => !imageRef);
+          if (renderNodes.length > 0) {
+            Logger.debug(`Getting image render URLs for ${renderNodes.length} nodes`);
+            
+            // 按格式和缩放比例分组处理
+            const formatGroups: Record<string, any[]> = {};
+            
+            for (const node of renderNodes) {
+              const format = node.format || "png";
+              const scale = node.scale || 1;
+              const key = `${format}_${scale}`;
+              
+              if (!formatGroups[key]) {
+                formatGroups[key] = [];
+              }
+              formatGroups[key].push(node);
+            }
+            
+            // 对每个格式和缩放比例组发起请求
+            for (const [key, groupNodes] of Object.entries(formatGroups)) {
+              const [format, scaleStr] = key.split('_');
+              const scale = parseFloat(scaleStr);
+              const nodeIds = groupNodes.map(n => n.nodeId);
+              
+              Logger.debug(`Requesting ${format} images at scale ${scale} for ${nodeIds.length} nodes`);
+              const endpoint = `/images/${fileKey}?ids=${nodeIds.join(",")}&format=${format}&scale=${scale}`;
+              
+              const response = await figmaService.request<GetImagesResponse>(endpoint);
+              if (response.images) {
+                Object.assign(imageUrls, response.images);
+              }
+            }
+            
+            Logger.log(`Got total of ${Object.keys(imageUrls).length} image URLs`);
+          }
+          
+          // 构建结果
+          const nodeResults = nodes.map(node => {
+            const url = imageUrls[node.nodeId];
+            return {
+              nodeId: node.nodeId,
+              url: url || null,
+              success: !!url
+            };
+          });
+          
+          const successCount = nodeResults.filter(n => n.success).length;
+          
           return {
             content: [
               {
                 type: "text",
-                text: saveSuccess
-                  ? `Success, ${downloads.length} images downloaded: ${downloads.join(", ")}`
-                  : "Failed",
+                text: JSON.stringify({
+                  success: successCount === nodes.length,
+                  total: nodes.length,
+                  successCount,
+                  images: nodeResults
+                }, null, 2)
               },
             ],
           };
         } catch (error) {
-          Logger.error(`Error downloading images from file ${fileKey}:`, error);
+          Logger.error(`Error getting image URLs from file ${fileKey}:`, error);
           return {
-            content: [{ type: "text", text: `Error downloading images: ${error}` }],
+            content: [{ type: "text", text: `Error getting image URLs: ${error}` }],
           };
         }
       },
