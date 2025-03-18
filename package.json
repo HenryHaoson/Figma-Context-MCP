@@ -36,11 +36,14 @@
   "license": "MIT",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.6.1",
+    "@types/content-type": "^1.1.8",
     "@types/yargs": "^17.0.33",
     "axios": "^1.7.9",
+    "content-type": "^1.0.5",
     "cross-env": "^7.0.3",
     "dotenv": "^16.4.7",
     "express": "^5.0.0",
+    "raw-body": "^3.0.0",
     "remeda": "^2.20.1",
     "yargs": "^17.7.2",
     "zod": "^3.24.2"
@@ -48,8 +51,10 @@
   "devDependencies": {
     "@figma/rest-api-spec": "^0.24.0",
     "@types/express": "^5.0.0",
+    "@types/express-serve-static-core": "^5.0.6",
     "@types/jest": "^29.5.11",
     "@types/node": "^20.17.0",
+    "@types/serve-static": "^1.15.7",
     "@typescript-eslint/eslint-plugin": "^8.24.0",
     "@typescript-eslint/parser": "^8.24.0",
     "eslint": "^9.20.1",

@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { FigmaService } from "./services/figma";
@@ -9,6 +8,7 @@ import { IncomingMessage, ServerResponse } from "http";
 import { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import { SimplifiedDesign } from "./services/simplify-node-response";
 import type { GetImagesResponse, GetImageFillsResponse } from "@figma/rest-api-spec";
+import { mcpHook_updateMessageEndpoint, mcpHook_updateMessageBody } from "./utils/mcp_hook";
 
 export const Logger = {
   debug: (...args: any[]) => {
@@ -37,7 +37,7 @@ export class FigmaMcpServer {
     this.apiKeyRequired = !!figmaApiKey;
     this.apiKey = figmaApiKey;
     Logger.log(`API 密钥是否必需: ${this.apiKeyRequired}`);
-    
+
     Logger.log("创建 McpServer 实例...");
     this.server = new McpServer(
       {
@@ -58,20 +58,20 @@ export class FigmaMcpServer {
     Logger.log("工具注册完成");
   }
 
-  private getFigmaService(): FigmaService {
+  private getFigmaService(key: string | undefined): FigmaService {
     Logger.debug("创建新的 FigmaService 实例");
     // 创建一个新的FigmaService实例，每次调用都是会话级别的
-    return new FigmaService(this.apiKey);
+    return new FigmaService(key ?? this.apiKey);
   }
 
   private updateApiKey(newApiKey: string): void {
-    Logger.log(`更新 API 密钥: ${newApiKey ? '******' + newApiKey.slice(-4) : '未提供'}`);
+    Logger.log(`更新 API 密钥: ${newApiKey ? "******" + newApiKey.slice(-4) : "未提供"}`);
     this.apiKey = newApiKey;
   }
 
   private registerTools(): void {
     Logger.log("开始注册 MCP 工具...");
-    
+
     // Tool to get file information
     Logger.debug("注册 get_figma_data 工具...");
     this.server.tool(
@@ -95,9 +95,12 @@ export class FigmaMcpServer {
           .describe(
             "How many levels deep to traverse the node tree, only use if explicitly requested by the user",
           ),
+        key: z.string().optional().describe("figma api key"),
       },
-      async ({ fileKey, nodeId, depth }) => {
-        Logger.log(`执行 get_figma_data: fileKey=${fileKey}, nodeId=${nodeId || '未提供'}, depth=${depth || '默认'}`);
+      async ({ fileKey, nodeId, depth, key }) => {
+        Logger.log(
+          `执行 get_figma_data: fileKey=${fileKey}, nodeId=${nodeId || "未提供"}, depth=${depth || "默认"}`,
+        );
         try {
           Logger.log(
             `获取 ${
@@ -107,15 +110,17 @@ export class FigmaMcpServer {
 
           // 为当前请求创建新的FigmaService实例
           Logger.debug("获取 FigmaService 实例...");
-          const figmaService = this.getFigmaService();
+          const figmaService = this.getFigmaService(key);
           Logger.debug("FigmaService 实例已获取");
-          
+
           let file: SimplifiedDesign;
           if (nodeId) {
-            Logger.log(`调用 figmaService.getNode: fileKey=${fileKey}, nodeId=${nodeId}, depth=${depth || '默认'}`);
+            Logger.log(
+              `调用 figmaService.getNode: fileKey=${fileKey}, nodeId=${nodeId}, depth=${depth || "默认"}`,
+            );
             file = await figmaService.getNode(fileKey, nodeId, depth);
           } else {
-            Logger.log(`调用 figmaService.getFile: fileKey=${fileKey}, depth=${depth || '默认'}`);
+            Logger.log(`调用 figmaService.getFile: fileKey=${fileKey}, depth=${depth || "默认"}`);
             file = await figmaService.getFile(fileKey, depth);
           }
 
@@ -129,7 +134,6 @@ export class FigmaMcpServer {
           const globalVarsJson = JSON.stringify(globalVars, null, 2);
           const resultJson = `{ "metadata": ${metadataJson}, "nodes": ${nodesJson}, "globalVars": ${globalVarsJson} }`;
           Logger.debug("序列化完成");
-          Logger.debug(resultJson);
           return {
             content: [{ type: "text", text: resultJson }],
           };
@@ -147,6 +151,7 @@ export class FigmaMcpServer {
       "Get URLs for Figma nodes as images (PNG or SVG). Works with any node type - Figma can render any node as an image. Download to use in your own projects.",
       {
         fileKey: z.string().describe("The key of the Figma file containing the node"),
+        key: z.string().optional().describe("figma api key"),
         nodes: z
           .object({
             nodeId: z
@@ -162,7 +167,9 @@ export class FigmaMcpServer {
               .enum(["png", "svg", "jpg", "pdf"])
               .optional()
               .default("png")
-              .describe("The format of the image to fetch. Defaults to png. SVG only works with vector nodes."),
+              .describe(
+                "The format of the image to fetch. Defaults to png. SVG only works with vector nodes.",
+              ),
             scale: z
               .number()
               .optional()
@@ -172,22 +179,22 @@ export class FigmaMcpServer {
           .array()
           .describe("The nodes to fetch as images"),
       },
-      async ({ fileKey, nodes }) => {
+      async ({ fileKey, nodes, key }) => {
         try {
           Logger.log(`Getting image URLs for ${nodes.length} nodes in file ${fileKey}`);
           // 为当前请求创建新的FigmaService实例
-          const figmaService = this.getFigmaService();
-          
+          const figmaService = this.getFigmaService(key);
+
           // 处理有 imageRef 的节点 (图片填充)
           const imageFills = nodes.filter(({ imageRef }) => !!imageRef);
           let imageUrls: Record<string, string> = {};
-          
+
           if (imageFills.length > 0) {
             Logger.debug(`Getting image fill URLs for ${imageFills.length} nodes`);
             const endpoint = `/files/${fileKey}/images`;
             const imageFillResponse = await figmaService.request<GetImageFillsResponse>(endpoint);
             const { images = {} } = imageFillResponse.meta;
-            
+
             for (const node of imageFills) {
               if (node.imageRef && images[node.imageRef]) {
                 imageUrls[node.nodeId] = images[node.imageRef];
@@ -195,66 +202,72 @@ export class FigmaMcpServer {
             }
             Logger.log(`Got ${Object.keys(imageUrls).length} image fill URLs`);
           }
-          
+
           // 处理其他节点 (渲染为图片)
           const renderNodes = nodes.filter(({ imageRef }) => !imageRef);
           if (renderNodes.length > 0) {
             Logger.debug(`Getting image render URLs for ${renderNodes.length} nodes`);
-            
+
             // 按格式和缩放比例分组处理
             const formatGroups: Record<string, any[]> = {};
-            
+
             for (const node of renderNodes) {
               const format = node.format || "png";
               const scale = node.scale || 1;
               const key = `${format}_${scale}`;
-              
+
               if (!formatGroups[key]) {
                 formatGroups[key] = [];
               }
               formatGroups[key].push(node);
             }
-            
+
             // 对每个格式和缩放比例组发起请求
             for (const [key, groupNodes] of Object.entries(formatGroups)) {
-              const [format, scaleStr] = key.split('_');
+              const [format, scaleStr] = key.split("_");
               const scale = parseFloat(scaleStr);
-              const nodeIds = groupNodes.map(n => n.nodeId);
-              
-              Logger.debug(`Requesting ${format} images at scale ${scale} for ${nodeIds.length} nodes`);
+              const nodeIds = groupNodes.map((n) => n.nodeId);
+
+              Logger.debug(
+                `Requesting ${format} images at scale ${scale} for ${nodeIds.length} nodes`,
+              );
               const endpoint = `/images/${fileKey}?ids=${nodeIds.join(",")}&format=${format}&scale=${scale}`;
-              
+
               const response = await figmaService.request<GetImagesResponse>(endpoint);
               if (response.images) {
                 Object.assign(imageUrls, response.images);
               }
             }
-            
+
             Logger.log(`Got total of ${Object.keys(imageUrls).length} image URLs`);
           }
-          
+
           // 构建结果
-          const nodeResults = nodes.map(node => {
+          const nodeResults = nodes.map((node) => {
             const url = imageUrls[node.nodeId];
             return {
               nodeId: node.nodeId,
               url: url || null,
-              success: !!url
+              success: !!url,
             };
           });
-          
-          const successCount = nodeResults.filter(n => n.success).length;
-          
+
+          const successCount = nodeResults.filter((n) => n.success).length;
+
           return {
             content: [
               {
                 type: "text",
-                text: JSON.stringify({
-                  success: successCount === nodes.length,
-                  total: nodes.length,
-                  successCount,
-                  images: nodeResults
-                }, null, 2)
+                text: JSON.stringify(
+                  {
+                    success: successCount === nodes.length,
+                    total: nodes.length,
+                    successCount,
+                    images: nodeResults,
+                  },
+                  null,
+                  2,
+                ),
               },
             ],
           };
@@ -299,69 +312,50 @@ export class FigmaMcpServer {
   async startHttpServer(port: number): Promise<void> {
     Logger.log(`启动 HTTP 服务器 (端口: ${port})...`);
     const app = express();
-    
-    app.get("/sse", async (req: express.Request, res: express.Response) => {
-      const requestId = Math.random().toString(36).substring(2, 9);
-      Logger.log(`[${requestId}] 新的 SSE 连接建立`);
-      
-      // Check for API key in query parameters
-      const apiKey = req.query.key as string;
-      Logger.debug(`[${requestId}] 客户端 IP: ${req.socket?.remoteAddress || '未知'}, User-Agent: ${req.headers['user-agent'] || '未知'}`);
-      
-      if (apiKey) {
-        Logger.log(`[${requestId}] 从查询参数更新 API 密钥`);
-        this.updateApiKey(apiKey);
-      } else if (this.apiKeyRequired) {
-        Logger.warn(`[${requestId}] 未提供必需的 Figma API 密钥`);
-        res.status(400).send("Figma API key is required. Use /sse?key=your_figma_api_key");
-        return;
-      }
-      
-      Logger.log(`[${requestId}] 创建 SSE 传输层...`);
+
+    app.get("/sse", async (req: Request, res: Response) => {
       try {
+        const hookUrl = mcpHook_updateMessageEndpoint(req);
+        console.log("hookUrl: " + hookUrl);
         this.sseTransport = new SSEServerTransport(
-          "/messages",
-          res as unknown as ServerResponse<IncomingMessage>,
+          hookUrl,
+          res as unknown as ServerResponse<IncomingMessage>
         );
-        Logger.log(`[${requestId}] SSE 传输层创建成功，连接到服务器...`);
         await this.server.connect(this.sseTransport);
-        Logger.log(`[${requestId}] 服务器已连接到 SSE 传输层`);
       } catch (error) {
-        Logger.error(`[${requestId}] 连接 SSE 传输层失败:`, error);
-        if (!res.headersSent) {
-          res.status(500).send("Internal server error");
-        }
+        Logger.error("Error connecting to SSE: " + error);
+        res.status(500).send("Error connecting to SSE");
       }
     });
 
-    app.post("/messages", async (req: express.Request, res: express.Response) => {
-      const requestId = Math.random().toString(36).substring(2, 9);
-      Logger.log(`[${requestId}] 收到 POST 消息请求`);
-      
-      if (!this.sseTransport) {
-        Logger.warn(`[${requestId}] 没有活动的 SSE 连接`);
-        res.sendStatus(400);
-        return;
-      }
-      
-      // Check for API key in query parameters
-      const apiKey = req.query.key as string;
-      if (apiKey) {
-        Logger.log(`[${requestId}] 从消息请求更新 API 密钥`);
-        this.updateApiKey(apiKey);
-      }
-      
-      Logger.log(`[${requestId}] 处理 POST 消息...`);
+    app.post("/messages", async (req: Request, res: Response) => {
       try {
-        await this.sseTransport.handlePostMessage(
-          req as unknown as IncomingMessage,
-          res as unknown as ServerResponse<IncomingMessage>,
-        );
-        Logger.log(`[${requestId}] POST 消息处理完成`);
-      } catch (error) {
-        Logger.error(`[${requestId}] 处理 POST 消息失败:`, error);
+        if (!this.sseTransport) {
+          res.status(400).send("SSE connection not established");
+          return;
+        }
+
+        try {
+          // 处理请求并获取消息内容
+          const messageContent = await mcpHook_updateMessageBody(req);
+          
+          // 使用处理好的消息内容调用handleMessage
+          await this.sseTransport.handleMessage(messageContent);
+          
+          // 返回成功响应
+          if (!res.headersSent) {
+            res.status(202).send("Accepted");
+          }
+        } catch (error: any) {
+          Logger.error("Error handling message: " + error);
+          if (!res.headersSent) {
+            res.status(500).send(`Error handling message: ${error.message || error}`);
+          }
+        }
+      } catch (error: any) {
+        Logger.error("Error in messages route: " + error);
         if (!res.headersSent) {
-          res.status(500).send("Internal server error");
+          res.status(500).send(`Server error: ${error.message || error}`);
         }
       }
     });

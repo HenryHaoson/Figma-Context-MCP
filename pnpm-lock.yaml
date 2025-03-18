@@ -15,12 +15,18 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: ^1.6.1
         version: 1.6.1
+      '@types/content-type':
+        specifier: ^1.1.8
+        version: 1.1.8
       '@types/yargs':
         specifier: ^17.0.33
         version: 17.0.33
       axios:
         specifier: ^1.7.9
         version: 1.7.9
+      content-type:
+        specifier: ^1.0.5
+        version: 1.0.5
       cross-env:
         specifier: ^7.0.3
         version: 7.0.3
@@ -30,6 +36,9 @@ importers:
       express:
         specifier: ^5.0.0
         version: 5.0.1
+      raw-body:
+        specifier: ^3.0.0
+        version: 3.0.0
       remeda:
         specifier: ^2.20.1
         version: 2.20.1
@@ -46,12 +55,18 @@ importers:
       '@types/express':
         specifier: ^5.0.0
         version: 5.0.0
+      '@types/express-serve-static-core':
+        specifier: ^5.0.6
+        version: 5.0.6
       '@types/jest':
         specifier: ^29.5.11
         version: 29.5.14
       '@types/node':
         specifier: ^20.17.0
         version: 20.17.23
+      '@types/serve-static':
+        specifier: ^1.15.7
+        version: 1.15.7
       '@typescript-eslint/eslint-plugin':
         specifier: ^8.24.0
         version: 8.26.0(@typescript-eslint/parser@8.26.0(eslint@9.20.1)(typescript@5.7.3))(eslint@9.20.1)(typescript@5.7.3)
@@ -608,6 +623,9 @@ packages:
 
   '@types/connect@3.4.38':
     resolution: {integrity: sha512-K6uROf1LD88uDQqJCktA4yzL1YYAK6NgfsI0v/mTgyPKWsX1CnJ0XPSDhViejru1GcRkLWb8RlzFYJRqGUbaug==}
+
+  '@types/content-type@1.1.8':
+    resolution: {integrity: sha512-1tBhmVUeso3+ahfyaKluXe38p+94lovUZdoVfQ3OnJo9uJC42JT7CBoN3k9HYhAae+GwiBYmHu+N9FZhOG+2Pg==}
 
   '@types/estree@1.0.6':
     resolution: {integrity: sha512-AYnb1nQyY49te+VRAVgmzfcgjYS91mY5P0TKUDCLEM+gNnA+3T6rWITXRLYCpahpqSQbN5cE+gHpnPyXjHWxcw==}
@@ -2855,6 +2873,8 @@ snapshots:
   '@types/connect@3.4.38':
     dependencies:
       '@types/node': 20.17.23
+
+  '@types/content-type@1.1.8': {}
 
   '@types/estree@1.0.6': {}
 

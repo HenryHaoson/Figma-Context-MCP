@@ -70,11 +70,11 @@ export class FigmaService {
     const requestId = Math.random().toString(36).substring(2, 9);
     const url = `${this.baseUrl}${endpoint}`;
     
-    Logger.log(`[${requestId}] 发起 Figma API 请求: ${url}`);
+    Logger.log(`发起 Figma API 请求: ${url}`);
     const startTime = Date.now();
     
     try {
-      Logger.debug(`[${requestId}] 请求头信息: { "X-Figma-Token": "${this.getApiKey()}" }`);
+      Logger.debug(`请求头信息: { "X-Figma-Token": "${this.getApiKey()}" }`);
       
       const response = await axios.get(url, {
         headers: {
@@ -84,32 +84,32 @@ export class FigmaService {
       });
       
       const duration = Date.now() - startTime;
-      Logger.log(`[${requestId}] Figma API 请求成功，耗时: ${duration}ms`);
-      Logger.debug(`[${requestId}] 响应状态码: ${response.status}`);
+      Logger.log(`Figma API 请求成功，耗时: ${duration}ms`);
+      Logger.debug(`响应状态码: ${response.status}`);
       
       return response.data;
     } catch (error) {
       const duration = Date.now() - startTime;
-      Logger.error(`[${requestId}] Figma API 请求失败，耗时: ${duration}ms`);
+      Logger.error(`Figma API 请求失败，耗时: ${duration}ms`);
       
       if (error instanceof AxiosError) {
         if (error.code === 'ECONNABORTED') {
-          Logger.error(`[${requestId}] 请求超时 (>${this.requestTimeoutMs}ms)`);
+          Logger.error(`请求超时 (>${this.requestTimeoutMs}ms)`);
         } else if (error.response) {
-          Logger.error(`[${requestId}] 服务器响应错误 - 状态码: ${error.response.status}`);
-          Logger.error(`[${requestId}] 错误详情:`, error.response.data);
+          Logger.error(`服务器响应错误 - 状态码: ${error.response.status}`);
+          Logger.error(`错误详情:`, error.response.data);
           
           throw {
             status: error.response.status,
             err: (error.response.data as { err?: string }).err || "未知错误",
           } as FigmaError;
         } else if (error.request) {
-          Logger.error(`[${requestId}] 未收到响应，可能是网络问题`);
+          Logger.error(`未收到响应，可能是网络问题`);
           throw new Error(`未收到响应: ${error.message}`);
         }
       }
       
-      Logger.error(`[${requestId}] 完整错误信息:`, error);
+      Logger.error(`完整错误信息:`, error);
       throw new Error(`Figma API 请求失败: ${error instanceof Error ? error.message : '未知错误'}`);
     }
   }
@@ -254,70 +254,70 @@ export class FigmaService {
 
   async getFile(fileKey: string, depth?: number): Promise<SimplifiedDesign> {
     const requestId = Math.random().toString(36).substring(2, 9);
-    Logger.log(`[${requestId}] 获取 Figma 文件: fileKey=${fileKey}, depth=${depth ?? '默认'}`);
+    Logger.log(`获取 Figma 文件: fileKey=${fileKey}, depth=${depth ?? '默认'}`);
     
     try {
       const endpoint = `/files/${fileKey}${depth ? `?depth=${depth}` : ""}`;
       const startTime = Date.now();
       
-      Logger.debug(`[${requestId}] 发起获取文件请求`);
+      Logger.debug(`发起获取文件请求`);
       const response = await this.request<GetFileResponse>(endpoint);
       
-      Logger.log(`[${requestId}] 文件响应成功，开始解析数据...`);
+      Logger.log(`文件响应成功，开始解析数据...`);
       const parseStartTime = Date.now();
       const simplifiedResponse = parseFigmaResponse(response);
       const parseTime = Date.now() - parseStartTime;
       
-      Logger.log(`[${requestId}] 文件数据解析完成，耗时: ${parseTime}ms`);
-      Logger.debug(`[${requestId}] 解析后节点数量: ${simplifiedResponse.nodes.length}`);
+      Logger.log(`文件数据解析完成，耗时: ${parseTime}ms`);
+      Logger.debug(`解析后节点数量: ${simplifiedResponse.nodes.length}`);
       
       const totalDuration = Date.now() - startTime;
-      Logger.log(`[${requestId}] 文件获取和解析总耗时: ${totalDuration}ms`);
+      Logger.log(`文件获取和解析总耗时: ${totalDuration}ms`);
       
       if (process.env.NODE_ENV === "development") {
-        Logger.debug(`[${requestId}] 写入调试日志文件`);
+        Logger.debug(`写入调试日志文件`);
         writeLogs("figma-raw.json", response);
         writeLogs("figma-simplified.json", simplifiedResponse);
       }
       
       return simplifiedResponse;
     } catch (e) {
-      Logger.error(`[${requestId}] 获取文件失败:`, e);
+      Logger.error(`获取文件失败:`, e);
       throw e;
     }
   }
 
   async getNode(fileKey: string, nodeId: string, depth?: number): Promise<SimplifiedDesign> {
     const requestId = Math.random().toString(36).substring(2, 9);
-    Logger.log(`[${requestId}] 获取 Figma 节点: fileKey=${fileKey}, nodeId=${nodeId}, depth=${depth ?? '默认'}`);
+    Logger.log(`获取 Figma 节点: fileKey=${fileKey}, nodeId=${nodeId}, depth=${depth ?? '默认'}`);
     
     try {
       const endpoint = `/files/${fileKey}/nodes?ids=${nodeId}${depth ? `&depth=${depth}` : ""}`;
       const startTime = Date.now();
       
-      Logger.debug(`[${requestId}] 发起获取节点请求`);
+      Logger.debug(`发起获取节点请求`);
       const response = await this.request<GetFileNodesResponse>(endpoint);
       
-      Logger.log(`[${requestId}] 节点响应成功，开始解析数据...`);
+      Logger.log(`节点响应成功，开始解析数据...`);
       const parseStartTime = Date.now();
       const simplifiedResponse = parseFigmaResponse(response);
       const parseTime = Date.now() - parseStartTime;
       
-      Logger.log(`[${requestId}] 节点数据解析完成，耗时: ${parseTime}ms`);
-      Logger.debug(`[${requestId}] 解析后节点数量: ${simplifiedResponse.nodes.length}`);
+      Logger.log(`节点数据解析完成，耗时: ${parseTime}ms`);
+      Logger.debug(`解析后节点数量: ${simplifiedResponse.nodes.length}`);
       
       const totalDuration = Date.now() - startTime;
-      Logger.log(`[${requestId}] 节点获取和解析总耗时: ${totalDuration}ms`);
+      Logger.log(`节点获取和解析总耗时: ${totalDuration}ms`);
       
       if (process.env.NODE_ENV === "development") {
-        Logger.debug(`[${requestId}] 写入调试日志文件`);
+        Logger.debug(`写入调试日志文件`);
         writeLogs("figma-raw.json", response);
         writeLogs("figma-simplified.json", simplifiedResponse);
       }
       
       return simplifiedResponse;
     } catch (e) {
-      Logger.error(`[${requestId}] 获取节点失败:`, e);
+      Logger.error(`获取节点失败:`, e);
       throw e;
     }
   }
@@ -329,24 +329,24 @@ function writeLogs(name: string, value: any) {
     if (process.env.NODE_ENV !== "development") return;
 
     const logsDir = "logs";
-    Logger.debug(`[${requestId}] 写入日志到文件: ${name}`);
+    Logger.debug(`写入日志到文件: ${name}`);
 
     try {
       fs.accessSync(process.cwd(), fs.constants.W_OK);
     } catch (error) {
-      Logger.error(`[${requestId}] 无法写入日志，没有写入权限:`, error);
+      Logger.error(`无法写入日志，没有写入权限:`, error);
       return;
     }
 
     if (!fs.existsSync(logsDir)) {
-      Logger.debug(`[${requestId}] 创建日志目录: ${logsDir}`);
+      Logger.debug(`创建日志目录: ${logsDir}`);
       fs.mkdirSync(logsDir);
     }
     
     const filePath = `${logsDir}/${name}`;
     fs.writeFileSync(filePath, JSON.stringify(value, null, 2));
-    Logger.debug(`[${requestId}] 日志写入成功: ${filePath}`);
+    Logger.debug(`日志写入成功: ${filePath}`);
   } catch (error) {
-    Logger.error(`[${requestId}] 写入日志失败:`, error);
+    Logger.error(`写入日志失败:`, error);
   }
 }
