@@ -8,7 +8,7 @@ import { IncomingMessage, ServerResponse } from "http";
 import { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import { SimplifiedDesign } from "./services/simplify-node-response";
 import type { GetImagesResponse, GetImageFillsResponse } from "@figma/rest-api-spec";
-import { mcpHook_updateMessageEndpoint, mcpHook_updateMessageBody } from "./utils/mcp_hook";
+import { mcpHook_updateMessageEndpoint, mcpHook_updateMessageBody, getFixedQuery } from "./utils/mcp_hook";
 
 export const Logger = {
   debug: (...args: any[]) => {
@@ -318,6 +318,8 @@ export class FigmaMcpServer {
       try {
         const hookUrl = mcpHook_updateMessageEndpoint(req);
         const transport = new SSEServerTransport(hookUrl, res);
+        console.log("hookUrl: " + hookUrl);
+        console.log("transport sessionId: " + transport.sessionId);
         transports[transport.sessionId] = transport;
         res.on("close", () => {
           delete transports[transport.sessionId];
@@ -331,8 +333,10 @@ export class FigmaMcpServer {
     });
 
     app.post("/messages", async (req: Request, res: Response) => {
-      const sessionId = req.query.sessionId as string;
+      const sessionId = getFixedQuery(req.query as Record<string, string>)["sessionId"];
       const transport = transports[sessionId];
+      console.log("messages sessionId: " + sessionId);
+      console.log("transport: " + transport);
       try {
         if (!transport) {
           res.status(400).send("No transport found for sessionId");
