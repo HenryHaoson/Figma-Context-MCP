@@ -312,16 +312,18 @@ export class FigmaMcpServer {
   async startHttpServer(port: number): Promise<void> {
     Logger.log(`启动 HTTP 服务器 (端口: ${port})...`);
     const app = express();
+    const transports: {[sessionId: string]: SSEServerTransport} = {};
 
     app.get("/sse", async (req: Request, res: Response) => {
       try {
         const hookUrl = mcpHook_updateMessageEndpoint(req);
+        const transport = new SSEServerTransport(hookUrl, res);
+        transports[transport.sessionId] = transport;
+        res.on("close", () => {
+          delete transports[transport.sessionId];
+        });
         console.log("hookUrl: " + hookUrl);
-        this.sseTransport = new SSEServerTransport(
-          hookUrl,
-          res as unknown as ServerResponse<IncomingMessage>
-        );
-        await this.server.connect(this.sseTransport);
+        await this.server.connect(transport);
       } catch (error) {
         Logger.error("Error connecting to SSE: " + error);
         res.status(500).send("Error connecting to SSE");
@@ -329,9 +331,11 @@ export class FigmaMcpServer {
     });
 
     app.post("/messages", async (req: Request, res: Response) => {
+      const sessionId = req.query.sessionId as string;
+      const transport = transports[sessionId];
       try {
-        if (!this.sseTransport) {
-          res.status(400).send("SSE connection not established");
+        if (!transport) {
+          res.status(400).send("No transport found for sessionId");
           return;
         }
 
@@ -340,7 +344,7 @@ export class FigmaMcpServer {
           const messageContent = await mcpHook_updateMessageBody(req);
           
           // 使用处理好的消息内容调用handleMessage
-          await this.sseTransport.handleMessage(messageContent);
+          await transport.handleMessage(messageContent);
           
           // 返回成功响应
           if (!res.headersSent) {
